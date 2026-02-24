@@ -2,22 +2,22 @@ import asyncio
 import aiohttp
 import aiofiles
 import ipaddress
-import concurrent.futures
 import os
 import time
 import requests
+import concurrent.futures
 from bs4 import BeautifulSoup
 
 # ================= CONFIG =================
 
 TIMEOUT = 10
 MAX_WORKERS = 120
-CONCURRENCY = 1000  # Maximum concurrent requests for async
-CHECK_URL_HTTP = "http://icanhazip.com"  # HTTP proxy check endpoint
-CHECK_URL_SOCKS = "http://httpbin.org/ip"  # SOCKS proxy check endpoint
+CONCURRENCY = 300  # Safe for GitHub Actions
+CHECK_URL_HTTP = "http://httpbin.org/ip"
+CHECK_URL_SOCKS = "http://httpbin.org/ip"
 
 SOURCES = [
-    # HTTP / HTTPS
+    # HTTP
     ("http", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=http&timeout=10000"),
     ("http", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=https&timeout=5000"),
     ("http", "https://proxyspace.pro/http.txt"),
@@ -25,43 +25,12 @@ SOURCES = [
     ("http", "https://vakhov.github.io/fresh-proxy-list/http.txt"),
     ("http", "https://vakhov.github.io/fresh-proxy-list/https.txt"),
     ("http", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/http.txt"),
-    ("http", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/https.txt"),
     ("http", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"),
-    ("http", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"),
-    ("http", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt"),
-    ("http", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"),
-    ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt"),
-    ("http", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/http_proxies.txt"),
-
-    # SOCKS4
-    ("socks4", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=socks4&timeout=10000"),
-    ("socks4", "https://proxyspace.pro/socks4.txt"),
-    ("socks4", "https://vakhov.github.io/fresh-proxy-list/socks4.txt"),
-    ("socks4", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks4.txt"),
-    ("socks4", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt"),
-    ("socks4", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt"),
-    ("socks4", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt"),
-    ("socks4", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt"),
-    ("socks4", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks4/data.txt"),
-    ("socks4", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks4_proxies.txt"),
-
-    # SOCKS5
-    ("socks5", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=socks5&timeout=10000"),
-    ("socks5", "https://proxyspace.pro/socks5.txt"),
-    ("socks5", "https://vakhov.github.io/fresh-proxy-list/socks5.txt"),
-    ("socks5", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks5.txt"),
-    ("socks5", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt"),
-    ("socks5", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt"),
-    ("socks5", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt"),
-    ("socks5", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt"),
-    ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
-    ("socks5", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks5_proxies.txt"),
 ]
 
 # ================= SCRAPING =================
 
 def fetch_source(p_type, url):
-    """Fetch a single proxy source and extract IP:PORTs."""
     found = set()
     try:
         r = requests.get(url, timeout=TIMEOUT)
@@ -70,16 +39,15 @@ def fetch_source(p_type, url):
 
         text = r.text.replace("\ufeff", "")
 
-        # If HTML, extract text
         if "<" in text and ">" in text:
             text = BeautifulSoup(text, "lxml").get_text()
 
         for line in text.splitlines():
             line = line.strip()
-            if line:
+            if line and ":" in line:
                 found.add(line)
 
-    except Exception:
+    except:
         pass
 
     return p_type, found
@@ -96,32 +64,25 @@ def scrape_proxies():
             p_type, found = future.result()
             proxies[p_type].update(found)
 
-    proxies["http"] = list(proxies["http"])
-    proxies["socks4"] = list(proxies["socks4"])
-    proxies["socks5"] = list(proxies["socks5"])
+    print(
+        f"[✓] Scraped {len(proxies['http'])} HTTP | "
+        f"{len(proxies['socks4'])} SOCKS4 | "
+        f"{len(proxies['socks5'])} SOCKS5 proxies"
+    )
 
-    print(f"[✓] Scraped {len(proxies['http'])} HTTP | {len(proxies['socks4'])} SOCKS4 | {len(proxies['socks5'])} SOCKS5 proxies")
     return proxies
 
 
-# ================= ASYNC PROXY CHECK =================
+# ================= PROXY CHECK =================
 
 async def check_proxy(session, proxy, p_type):
-    """Check if proxy is alive. Return proxy if alive else None."""
-    
-    if p_type == "http":
-        proxy_url = f"http://{proxy}"
-        target_url = CHECK_URL_HTTP
-    else:
-        proxy_url = f"{p_type}://{proxy}"
-        target_url = CHECK_URL_SOCKS
+    proxy_url = f"{p_type}://{proxy}"
 
-    for attempt in range(2):  # 1 retry (2 total attempts)
+    for attempt in range(2):  # 1 retry
         try:
             async with session.get(
-                target_url,
+                CHECK_URL_HTTP,
                 proxy=proxy_url,
-                timeout=aiohttp.ClientTimeout(total=TIMEOUT),
             ) as resp:
 
                 if resp.status != 200:
@@ -129,12 +90,10 @@ async def check_proxy(session, proxy, p_type):
 
                 text = await resp.text()
 
-                # Check plain IP response
                 try:
                     ipaddress.ip_address(text.strip())
                     return proxy
                 except ValueError:
-                    # Try JSON response (httpbin)
                     try:
                         data = await resp.json()
                         if "origin" in data:
@@ -145,11 +104,11 @@ async def check_proxy(session, proxy, p_type):
         except:
             if attempt == 1:
                 return None
-            continue
 
     return None
 
-# ================= FILE PROCESSING =================
+
+# ================= CHECK FILE =================
 
 async def process_file(input_file, output_file, p_type):
     if not os.path.exists(input_file):
@@ -161,57 +120,64 @@ async def process_file(input_file, output_file, p_type):
 
     print(f"[+] Checking {len(proxies)} {p_type} proxies...")
 
-    valid_proxies = []
-    start_time = time.time()
+    valid = []
+    start = time.time()
+    semaphore = asyncio.Semaphore(CONCURRENCY)
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for proxy in proxies:
-            tasks.append(check_proxy(session, proxy, p_type))
+    timeout = aiohttp.ClientTimeout(total=TIMEOUT)
 
-        results = await asyncio.gather(*tasks)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
 
-        for i, result in enumerate(results, 1):
+        async def bounded(proxy):
+            async with semaphore:
+                return await check_proxy(session, proxy, p_type)
+
+        tasks = [bounded(p) for p in proxies]
+
+        for i, future in enumerate(asyncio.as_completed(tasks), 1):
+            result = await future
             if result:
-                valid_proxies.append(result)
+                valid.append(result)
+
             if i % 50 == 0 or i == len(proxies):
-                elapsed = time.time() - start_time
-                print(f"  Checked {i}/{len(proxies)} | Live: {len(valid_proxies)} | {elapsed:.1f}s", end="\r")
+                elapsed = time.time() - start
+                print(
+                    f"  Checked {i}/{len(proxies)} | "
+                    f"Live: {len(valid)} | "
+                    f"{elapsed:.1f}s",
+                    end="\r",
+                )
 
-    # Save live proxies
     os.makedirs("checked", exist_ok=True)
-    async with aiofiles.open(output_file, "w") as f:
-        for p in sorted(valid_proxies):
-            await f.write(f"{p}\n")
 
-    print(f"\n[✓] {len(valid_proxies)} live {p_type} proxies saved to {output_file}")
-    return len(valid_proxies)
+    async with aiofiles.open(output_file, "w") as f:
+        for p in sorted(valid):
+            await f.write(p + "\n")
+
+    print(f"\n[✓] {len(valid)} live {p_type} proxies saved to {output_file}")
+    return len(valid)
+
 
 # ================= MAIN =================
 
 async def main():
-    # Scrape proxies first
     proxies = scrape_proxies()
 
-    # Create scraped folder
+    # Save scraped proxies
     os.makedirs("scraped", exist_ok=True)
-
-    # Save scraped proxies to files
     for p_type in proxies:
         with open(f"scraped/{p_type}_proxies.txt", "w") as f:
             for proxy in proxies[p_type]:
                 f.write(proxy + "\n")
 
-    print("[✓] Scraped proxies saved to /scraped folder")
+    print("[✓] Scraped proxies saved.")
 
-    os.makedirs("checked", exist_ok=True)
-
-    # Now check them
     live_http = await process_file("scraped/http_proxies.txt", "checked/http_live.txt", "http")
     live_socks4 = await process_file("scraped/socks4_proxies.txt", "checked/socks4_live.txt", "socks4")
     live_socks5 = await process_file("scraped/socks5_proxies.txt", "checked/socks5_live.txt", "socks5")
 
     print(f"\nSummary: HTTP={live_http}, SOCKS4={live_socks4}, SOCKS5={live_socks5}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
