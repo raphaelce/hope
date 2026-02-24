@@ -7,14 +7,18 @@ import time
 import requests
 import concurrent.futures
 from bs4 import BeautifulSoup
+from aiohttp_socks import ProxyConnector
 
 # ================= CONFIG =================
 
-TIMEOUT = 10
+TIMEOUT = 8
 MAX_WORKERS = 120
-CONCURRENCY = 300  # Safe for GitHub Actions
+CONCURRENCY = 200
+
 CHECK_URL_HTTP = "http://httpbin.org/ip"
-CHECK_URL_SOCKS = "http://httpbin.org/ip"
+CHECK_URL_SOCKS = "http://icanhazip.com"
+
+# ================= SOURCES =================
 
 SOURCES = [
     # HTTP / HTTPS
@@ -97,39 +101,47 @@ def scrape_proxies():
     print(
         f"[✓] Scraped {len(proxies['http'])} HTTP | "
         f"{len(proxies['socks4'])} SOCKS4 | "
-        f"{len(proxies['socks5'])} SOCKS5 proxies"
+        f"{len(proxies['socks5'])} SOCKS5"
     )
 
     return proxies
 
-
 # ================= PROXY CHECK =================
 
-async def check_proxy(session, proxy, p_type):
-    proxy_url = f"{p_type}://{proxy}"
-
+async def check_proxy(proxy, p_type):
     for attempt in range(2):  # 1 retry
         try:
-            async with session.get(
-                CHECK_URL_HTTP,
-                proxy=proxy_url,
-            ) as resp:
+            timeout = aiohttp.ClientTimeout(total=TIMEOUT)
 
-                if resp.status != 200:
-                    continue
+            if p_type == "http":
+                connector = aiohttp.TCPConnector(ssl=False)
+                proxy_url = f"http://{proxy}"
+                target_url = CHECK_URL_HTTP
+            else:
+                connector = ProxyConnector.from_url(f"{p_type}://{proxy}")
+                proxy_url = None
+                target_url = CHECK_URL_SOCKS
 
-                text = await resp.text()
+            async with aiohttp.ClientSession(
+                connector=connector,
+                timeout=timeout
+            ) as session:
 
-                try:
-                    ipaddress.ip_address(text.strip())
-                    return proxy
-                except ValueError:
-                    try:
+                async with session.get(target_url, proxy=proxy_url) as resp:
+                    if resp.status != 200:
+                        continue
+
+                    if p_type == "http":
                         data = await resp.json()
                         if "origin" in data:
                             return proxy
-                    except:
-                        pass
+                    else:
+                        text = await resp.text()
+                        try:
+                            ipaddress.ip_address(text.strip())
+                            return proxy
+                        except ValueError:
+                            continue
 
         except:
             if attempt == 1:
@@ -137,46 +149,34 @@ async def check_proxy(session, proxy, p_type):
 
     return None
 
+# ================= PROCESS PROXIES =================
 
-# ================= CHECK FILE =================
-
-async def process_file(input_file, output_file, p_type):
-    if not os.path.exists(input_file):
-        print(f"[!] File {input_file} not found. Skipping {p_type}")
-        return 0
-
-    async with aiofiles.open(input_file, "r") as f:
-        proxies = [line.strip() for line in await f.readlines() if line.strip()]
-
-    print(f"[+] Checking {len(proxies)} {p_type} proxies...")
+async def process_proxies(proxy_list, output_file, p_type):
+    print(f"[+] Checking {len(proxy_list)} {p_type} proxies...")
 
     valid = []
-    start = time.time()
     semaphore = asyncio.Semaphore(CONCURRENCY)
+    start = time.time()
 
-    timeout = aiohttp.ClientTimeout(total=TIMEOUT)
+    async def bounded(proxy):
+        async with semaphore:
+            return await check_proxy(proxy, p_type)
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    tasks = [bounded(p) for p in proxy_list]
 
-        async def bounded(proxy):
-            async with semaphore:
-                return await check_proxy(session, proxy, p_type)
+    for i, future in enumerate(asyncio.as_completed(tasks), 1):
+        result = await future
+        if result:
+            valid.append(result)
 
-        tasks = [bounded(p) for p in proxies]
-
-        for i, future in enumerate(asyncio.as_completed(tasks), 1):
-            result = await future
-            if result:
-                valid.append(result)
-
-            if i % 50 == 0 or i == len(proxies):
-                elapsed = time.time() - start
-                print(
-                    f"  Checked {i}/{len(proxies)} | "
-                    f"Live: {len(valid)} | "
-                    f"{elapsed:.1f}s",
-                    end="\r",
-                )
+        if i % 50 == 0 or i == len(proxy_list):
+            elapsed = time.time() - start
+            print(
+                f"  Checked {i}/{len(proxy_list)} | "
+                f"Live: {len(valid)} | "
+                f"{elapsed:.1f}s",
+                end="\r",
+            )
 
     os.makedirs("checked", exist_ok=True)
 
@@ -187,28 +187,26 @@ async def process_file(input_file, output_file, p_type):
     print(f"\n[✓] {len(valid)} live {p_type} proxies saved to {output_file}")
     return len(valid)
 
-
 # ================= MAIN =================
 
 async def main():
     proxies = scrape_proxies()
 
-    # Save scraped proxies
     os.makedirs("scraped", exist_ok=True)
+
+    # Save scraped proxies
     for p_type in proxies:
         with open(f"scraped/{p_type}_proxies.txt", "w") as f:
             for proxy in proxies[p_type]:
                 f.write(proxy + "\n")
 
-    print("[✓] Scraped proxies saved.")
+    print("[✓] Scraped proxies saved.\n")
 
-    live_http = await process_file("scraped/http_proxies.txt", "checked/http_live.txt", "http")
-    live_socks4 = await process_file("scraped/socks4_proxies.txt", "checked/socks4_live.txt", "socks4")
-    live_socks5 = await process_file("scraped/socks5_proxies.txt", "checked/socks5_live.txt", "socks5")
+    live_http = await process_proxies(proxies["http"], "checked/http_live.txt", "http")
+    live_socks4 = await process_proxies(proxies["socks4"], "checked/socks4_live.txt", "socks4")
+    live_socks5 = await process_proxies(proxies["socks5"], "checked/socks5_live.txt", "socks5")
 
     print(f"\nSummary: HTTP={live_http}, SOCKS4={live_socks4}, SOCKS5={live_socks5}")
 
-
 if __name__ == "__main__":
     asyncio.run(main())
-
