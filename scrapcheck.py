@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 # ================= CONFIG =================
 
-TIMEOUT = 5
+TIMEOUT = 10
 MAX_WORKERS = 120
 CONCURRENCY = 1000  # Maximum concurrent requests for async
 CHECK_URL_HTTP = "http://icanhazip.com"  # HTTP proxy check endpoint
@@ -108,39 +108,46 @@ def scrape_proxies():
 
 async def check_proxy(session, proxy, p_type):
     """Check if proxy is alive. Return proxy if alive else None."""
+    
     if p_type == "http":
-        proxies = {
-            "http": f"http://{proxy}",
-            "https": f"http://{proxy}",
-        }
+        proxy_url = f"http://{proxy}"
         target_url = CHECK_URL_HTTP
     else:
-        proxies = {
-            "http": f"{p_type}://{proxy}",
-            "https": f"{p_type}://{proxy}",
-        }
+        proxy_url = f"{p_type}://{proxy}"
         target_url = CHECK_URL_SOCKS
 
-    try:
-        async with session.get(target_url, proxy=proxies.get("http"), timeout=TIMEOUT) as resp:
-            if resp.status != 200:
-                return None
+    for attempt in range(2):  # 1 retry (2 total attempts)
+        try:
+            async with session.get(
+                target_url,
+                proxy=proxy_url,
+                timeout=aiohttp.ClientTimeout(total=TIMEOUT),
+            ) as resp:
 
-            text = await resp.text()
-            # For icanhazip.com, it's just the IP
-            try:
-                ipaddress.ip_address(text.strip())
-                return proxy
-            except ValueError:
-                # For httpbin.org/ip, check JSON
+                if resp.status != 200:
+                    continue
+
+                text = await resp.text()
+
+                # Check plain IP response
                 try:
-                    data = await resp.json()
-                    if "origin" in data:
-                        return proxy
-                except:
-                    return None
-    except:
-        return None
+                    ipaddress.ip_address(text.strip())
+                    return proxy
+                except ValueError:
+                    # Try JSON response (httpbin)
+                    try:
+                        data = await resp.json()
+                        if "origin" in data:
+                            return proxy
+                    except:
+                        pass
+
+        except:
+            if attempt == 1:
+                return None
+            continue
+
+    return None
 
 # ================= FILE PROCESSING =================
 
