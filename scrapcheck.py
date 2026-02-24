@@ -17,7 +17,7 @@ CHECK_URL_HTTP = "http://httpbin.org/ip"
 CHECK_URL_SOCKS = "http://httpbin.org/ip"
 
 SOURCES = [
-    # HTTP
+    # HTTP / HTTPS
     ("http", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=http&timeout=10000"),
     ("http", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=https&timeout=5000"),
     ("http", "https://proxyspace.pro/http.txt"),
@@ -25,7 +25,37 @@ SOURCES = [
     ("http", "https://vakhov.github.io/fresh-proxy-list/http.txt"),
     ("http", "https://vakhov.github.io/fresh-proxy-list/https.txt"),
     ("http", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/http.txt"),
+    ("http", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/https.txt"),
     ("http", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"),
+    ("http", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt"),
+    ("http", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt"),
+    ("http", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"),
+    ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt"),
+    ("http", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/http_proxies.txt"),
+
+    # SOCKS4
+    ("socks4", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=socks4&timeout=10000"),
+    ("socks4", "https://proxyspace.pro/socks4.txt"),
+    ("socks4", "https://vakhov.github.io/fresh-proxy-list/socks4.txt"),
+    ("socks4", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks4.txt"),
+    ("socks4", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt"),
+    ("socks4", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt"),
+    ("socks4", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt"),
+    ("socks4", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt"),
+    ("socks4", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks4/data.txt"),
+    ("socks4", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks4_proxies.txt"),
+
+    # SOCKS5
+    ("socks5", "https://api.proxyscrape.com/v4/free-proxy-list/get?request=displayproxies&protocol=socks5&timeout=10000"),
+    ("socks5", "https://proxyspace.pro/socks5.txt"),
+    ("socks5", "https://vakhov.github.io/fresh-proxy-list/socks5.txt"),
+    ("socks5", "https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks5.txt"),
+    ("socks5", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt"),
+    ("socks5", "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt"),
+    ("socks5", "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt"),
+    ("socks5", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt"),
+    ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
+    ("socks5", "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/generated/socks5_proxies.txt"),
 ]
 
 # ================= SCRAPING =================
@@ -181,3 +211,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
