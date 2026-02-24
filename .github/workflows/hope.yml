@@ -39,7 +39,7 @@ jobs:
 
       # Step 5: Run the combined proxy scraper and checker (scrapcheck.py)
       - name: Run scrapcheck.py
-        run: python scrapcheck.py  # Ensure this script scrapes and checks proxies
+        run: python -u scrapcheck.py
 
       # Step 6: Generate commit message
       - name: Generate commit message
