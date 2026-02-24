@@ -186,9 +186,20 @@ async def main():
     # Scrape proxies first
     proxies = scrape_proxies()
 
+    # Create scraped folder
+    os.makedirs("scraped", exist_ok=True)
+
+    # Save scraped proxies to files
+    for p_type in proxies:
+        with open(f"scraped/{p_type}_proxies.txt", "w") as f:
+            for proxy in proxies[p_type]:
+                f.write(proxy + "\n")
+
+    print("[✓] Scraped proxies saved to /scraped folder")
+
     os.makedirs("checked", exist_ok=True)
 
-    # Now check the validity of proxies asynchronously and save results
+    # Now check them
     live_http = await process_file("scraped/http_proxies.txt", "checked/http_live.txt", "http")
     live_socks4 = await process_file("scraped/socks4_proxies.txt", "checked/socks4_live.txt", "socks4")
     live_socks5 = await process_file("scraped/socks5_proxies.txt", "checked/socks5_live.txt", "socks5")
@@ -196,5 +207,4 @@ async def main():
     print(f"\nSummary: HTTP={live_http}, SOCKS4={live_socks4}, SOCKS5={live_socks5}")
 
 if __name__ == "__main__":
-
     asyncio.run(main())
