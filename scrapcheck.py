@@ -8,7 +8,7 @@ import requests
 import concurrent.futures
 from bs4 import BeautifulSoup
 from aiohttp_socks import ProxyConnector
-
+print("SCRIPT STARTED", flush=True)
 # ================= CONFIG =================
 
 TIMEOUT = 8
@@ -210,3 +210,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
